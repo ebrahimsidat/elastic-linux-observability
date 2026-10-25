@@ -2,7 +2,7 @@
 # Load the ILM policy into Elasticsearch and create the disk usage alert rule in Kibana.
 #
 # Usage: ES_URL=http://localhost:9200 KIBANA_URL=http://localhost:5601 \
-#        ES_USERNAME=elastic ES_PASSWORD=... ./elasticsearch/load-assets.sh
+#        ES_USERNAME=elastic ES_PASSWORD=... bash elasticsearch/load-assets.sh
 set -euo pipefail
 
 : "${ES_URL:=http://localhost:9200}"
