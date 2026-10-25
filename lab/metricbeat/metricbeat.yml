@@ -1,0 +1,50 @@
+---
+# Metricbeat configuration for Linux host health: CPU, memory, load, network, processes and file systems.
+
+metricbeat.modules:
+  - module: system
+    period: 30s
+    metricsets:
+      - cpu
+      - load
+      - memory
+      - network
+      - process
+      - process_summary
+      - uptime
+    cpu.metrics: [percentages, normalized_percentages]
+    process.include_top_n:
+      by_cpu: 5
+      by_memory: 5
+
+  - module: system
+    period: 1m
+    metricsets:
+      - filesystem
+      - fsstat
+    processors:
+      # Ignore pseudo and container file systems so capacity data reflects real storage.
+      - drop_event.when.regexp:
+          system.filesystem.mount_point: '^/(sys|cgroup|proc|dev|etc|host|lib|snap|run|var/lib/docker)($|/)'
+
+processors:
+  - add_host_metadata: ~
+
+setup.ilm.enabled: true
+setup.template.settings:
+  index.number_of_shards: 1
+  index.number_of_replicas: 0
+
+# Load the bundled "[Metricbeat System]" Kibana dashboards on start-up.
+setup.dashboards.enabled: true
+setup.kibana:
+  host: "http://kibana:5601"
+  username: "elastic"
+  password: "${ELASTIC_PASSWORD}"
+
+output.elasticsearch:
+  hosts: ["http://elasticsearch:9200"]
+  username: "elastic"
+  password: "${ELASTIC_PASSWORD}"
+
+monitoring.enabled: false
