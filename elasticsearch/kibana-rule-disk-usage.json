@@ -1,0 +1,27 @@
+{
+  "name": "Linux file system above 90% used",
+  "tags": ["infrastructure", "capacity", "linux"],
+  "rule_type_id": ".es-query",
+  "consumer": "alerts",
+  "schedule": {
+    "interval": "5m"
+  },
+  "notify_when": "onActionGroupChange",
+  "params": {
+    "searchType": "esQuery",
+    "index": ["metricbeat-*"],
+    "timeField": "@timestamp",
+    "esQuery": "{\"query\":{\"bool\":{\"filter\":[{\"range\":{\"system.filesystem.used.pct\":{\"gte\":0.9}}},{\"bool\":{\"must_not\":[{\"prefix\":{\"system.filesystem.mount_point\":\"/snap\"}}]}}]}}}",
+    "size": 100,
+    "threshold": [0],
+    "thresholdComparator": ">",
+    "timeWindowSize": 10,
+    "timeWindowUnit": "m",
+    "excludeHitsFromPreviousRun": false,
+    "aggType": "count",
+    "groupBy": "top",
+    "termField": "host.name",
+    "termSize": 50
+  },
+  "actions": []
+}
