@@ -1,0 +1,119 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+
+  test:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest
+
+  integration:
+    name: Integration test against Elasticsearch
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd "curl -fs http://localhost:9200/_cluster/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Seed Metricbeat-shaped data
+        run: python tests/integration/seed_elasticsearch.py
+      - name: Run fsmon and verify results
+        run: |
+          set +e
+          fsmon --url http://localhost:9200 --index metricbeat-ci --format json > result.json
+          code=$?
+          set -e
+          cat result.json
+          test "${code}" -eq 2
+          test "$(jq -r '.status' result.json)" = "CRITICAL"
+          test "$(jq -r '.results[0].mount' result.json)" = "/var/lib/pgsql"
+          test "$(jq -r '[.results[] | select(.host == "web01" and .mount == "/")][0].status' result.json)" = "OK"
+          test "$(jq '.results | length' result.json)" -eq 4
+      - name: Nagios output returns WARNING when the critical mount is excluded
+        run: |
+          set +e
+          fsmon --url http://localhost:9200 --index metricbeat-ci --format nagios --exclude-mount '/var/lib/*'
+          code=$?
+          set -e
+          test "${code}" -eq 1
+
+  lab:
+    name: Validate lab and assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate docker compose file
+        run: |
+          cp lab/.env.example lab/.env
+          docker compose -f lab/docker-compose.yml config --quiet
+      - name: Validate JSON assets
+        run: for f in elasticsearch/*.json; do jq empty "$f"; done
+      - name: ShellCheck
+        run: shellcheck elasticsearch/*.sh
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install bandit pip-audit
+      - run: bandit -q -r src
+      - run: pip-audit --strict --progress-spinner off .
