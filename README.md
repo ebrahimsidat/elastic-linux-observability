@@ -83,7 +83,7 @@ Open Kibana at <http://localhost:5601>, sign in as `elastic`, and open the **[Me
 dashboard. Then load the operational assets and run fsmon against the lab:
 
 ```bash
-ES_PASSWORD=... ../elasticsearch/load-assets.sh
+ES_PASSWORD=... bash ../elasticsearch/load-assets.sh
 ES_USERNAME=elastic ES_PASSWORD=... fsmon
 ```
 
